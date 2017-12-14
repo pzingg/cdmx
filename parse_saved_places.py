@@ -5,6 +5,7 @@ import json
 from operator import itemgetter
 import re
 import sys
+from xml.sax import saxutils
 
 
 class PlaceSorter:
@@ -51,6 +52,70 @@ class PlaceSorter:
     MAX_LAT = 20.0
     MIN_LNG = -100.0
     MAX_LNG = -98.0
+
+    MAPS_ME_HEADER = """<?xml version="1.0" encoding="UTF-8"?>
+    <kml xmlns="http://earth.google.com/kml/2.2">
+    <Document>
+      <Style id="placemark-blue">
+        <IconStyle>
+          <Icon>
+            <href>http://mapswith.me/placemarks/placemark-blue.png</href>
+          </Icon>
+        </IconStyle>
+      </Style>
+      <Style id="placemark-brown">
+        <IconStyle>
+          <Icon>
+            <href>http://mapswith.me/placemarks/placemark-brown.png</href>
+          </Icon>
+        </IconStyle>
+      </Style>
+      <Style id="placemark-green">
+        <IconStyle>
+          <Icon>
+            <href>http://mapswith.me/placemarks/placemark-green.png</href>
+          </Icon>
+        </IconStyle>
+      </Style>
+      <Style id="placemark-orange">
+        <IconStyle>
+          <Icon>
+            <href>http://mapswith.me/placemarks/placemark-orange.png</href>
+          </Icon>
+        </IconStyle>
+      </Style>
+      <Style id="placemark-pink">
+        <IconStyle>
+          <Icon>
+            <href>http://mapswith.me/placemarks/placemark-pink.png</href>
+          </Icon>
+        </IconStyle>
+      </Style>
+      <Style id="placemark-purple">
+        <IconStyle>
+          <Icon>
+            <href>http://mapswith.me/placemarks/placemark-purple.png</href>
+          </Icon>
+        </IconStyle>
+      </Style>
+      <Style id="placemark-red">
+        <IconStyle>
+          <Icon>
+            <href>http://mapswith.me/placemarks/placemark-red.png</href>
+          </Icon>
+        </IconStyle>
+      </Style>
+      <Style id="placemark-yellow">
+        <IconStyle>
+          <Icon>
+            <href>http://mapswith.me/placemarks/placemark-yellow.png</href>
+          </Icon>
+        </IconStyle>
+      </Style>"""
+
+    MAPS_ME_FOOTER = """    </Document>
+    </kml>"""
+
 
     def __init__(self):
         self.delegaciones = []
@@ -155,12 +220,11 @@ class PlaceSorter:
                 fname = os.path.join('geojson', d['file'] + '.geojson')
                 self.parse_delegacion(name, fname)
 
-        print('Parsed {} colonias'.format(len(self.colonias)))
+        print('Parsed {} colonias'.format(len(self.colonias)), file = sys.stderr)
 
         with open('Saved Places.json') as f:
             collection = json.load(f)
-            print('{} places'.format(len(collection['features'])))
-            print()
+            print('Parsing {} places'.format(len(collection['features'])), file = sys.stderr)
 
             for feature in [f for f in collection['features'] if self.filtered_feature(f)]:
                 loc = feature['properties']['Location']
@@ -200,6 +264,7 @@ class PlaceSorter:
                     'name': name,
                     'address': address_lines,
                     'url': feature['properties']['Google Maps URL'],
+                    'published': feature['properties']['Published'],
                     'lng': lng,
                     'lat': lat,
                     'cve': cve,
@@ -208,6 +273,9 @@ class PlaceSorter:
                     'd_name': d_name
                 }
                 self.all_places.append(place)
+
+        print('Filtered to {} places'.format(len(self.all_places)), file = sys.stderr)
+
 
     def sort_and_print_places(self):
         colonia = ''
@@ -232,6 +300,26 @@ class PlaceSorter:
             print()
 
 
+    def export_to_maps_me(self, set_name):
+        print(self.MAPS_ME_HEADER)
+        print("""    <name>{}</name>
+    <visibility>1</visibility>""".format(set_name))
+        for place in self.all_places:
+            description = 'Address:\n' + '\n'.join(place['address'])
+            print("""    <Placemark>
+      <name>{}</name>
+      <description>{}</description>
+      <TimeStamp><when>{}</when></TimeStamp>
+      <styleUrl>#placemark-blue</styleUrl>
+      <Point><coordinates>{},{}</coordinates></Point>
+      <ExtendedData xmlns:mwm="http://mapswith.me">
+         <mwm:scale>18</mwm:scale>
+      </ExtendedData>
+    </Placemark>""".format(saxutils.escape(place['name']), saxutils.escape(description),
+        place['published'], place['lng'], place['lat']))
+        print(self.MAPS_ME_FOOTER)
+
 ps = PlaceSorter()
 ps.filter_places()
-ps.sort_and_print_places()
+# ps.sort_and_print_places()
+ps.export_to_maps_me('Google CDMX')
