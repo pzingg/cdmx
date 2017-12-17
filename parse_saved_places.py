@@ -1,8 +1,10 @@
+#!/usr/bin/python3
 
-import os
+import click
 from geojson_utils import point_in_polygon, centroid
 import json
 from operator import itemgetter
+import os
 import re
 import sys
 from xml.sax import saxutils
@@ -10,15 +12,15 @@ from xml.sax import saxutils
 
 class PlaceSorter:
     DELEGACIONES = {
-        'Cuauhtémoc': { 'order': 12, 'file': 'Cuauhtemoc'},
-        'Venustiano Carranza': { 'order': 13, 'file': None },
+        'Cuauhtémoc': { 'order': 13, 'file': 'Cuauhtemoc'},
+        'Venustiano Carranza': { 'order': 14, 'file': None },
         'Miguel Hidalgo': { 'order': 20, 'file': 'MiguelHidalgo' },
-        'Cuajimalpa de Morelos': { 'order': 23, 'file': 'CuajimalpaDeMorelos' },
-        'Benito Juarez': { 'order': 29, 'file': 'BenitoJuarez' },
-        'Alvaro Obregón': { 'order': 30, 'file': 'AlvaroObregon' },
-        'Coyoacán': { 'order': 35, 'file': 'Coyoacan' },
-        'Tlalpan': { 'order': 40, 'file': None },
-        'Xochimilco': { 'order': 45, 'file': None },
+        'Cuajimalpa de Morelos': { 'order': 32, 'file': 'CuajimalpaDeMorelos' },
+        'Alvaro Obregón': { 'order': 45, 'file': 'AlvaroObregon' },
+        'Benito Juarez': { 'order': 46, 'file': 'BenitoJuarez' },
+        'Coyoacán': { 'order': 55, 'file': 'Coyoacan' },
+        'Tlalpan': { 'order': 61, 'file': None },
+        'Xochimilco': { 'order': 62, 'file': None },
     }
     COLONIAS = [
         ('Santa Maria la Ribera', 1, [ '15-075', '15-076', '15-078' ]),
@@ -28,24 +30,25 @@ class PlaceSorter:
         ('Guerrero', 5, [ '15-036', '15-052', '15-053' ]),
         ('San Rafael/Tabacalera', 6, [ '15-031', '15-073']),
         ('Cuauhtemoc', 7, [ '15-009' ]),
-        ('Zona Rosa', 8, [ '15-017' ]),
+        ('Zona Rosa/Juarez', 8, [ '15-017' ]),
         ('La Condesa', 9, [ '15-008', '15-016', '15-055', '15-054' ]),
         ('Roma Norte', 10, [ '15-068', '15-069', '15-070' ]),
         ('Roma Sur', 11, [ '15-071', '15-072' ]),
-        ('Argentina', 14, [ '16-027', '16-014' ]),
-        ('Polanco', 15, [ '16-035', '16-032', '16-031', '16-055', '16-054', '16-065', '16-021', '16-059', '16-022', '16-018' ]),
-        ('Bosque de Chapultepec', 16, [ '16-015' ]),
-        ('San Miguel Chapultepec', 17, [ '16-094', '16-095' ]),
-        ('Daniel Garza', 18, [ '16-086', '16-003', '16-025', '16-058' ]),
-        ('Lomas de Chapultepec', 19, [ '16-042' ]),
-        ('Santa Fe', 21, [ '04-025', '04-028' ]),
-        ('Narvarte', 25, [ '14-063' ]),
-        ('Insurgentes Sur/Napoles', 26, [ '14-014', '14-028']),
-        ('Xoco', 27, [ '14-049' ]),
-        ('San Angel', 31, [ '10-193', '10-192', '10-042', '03-019' ]),
-        ('Coyoacan', 32, [ '03-037', '03-065', '03-105', '03-106', '03-114', '03-107', '03-012', '03-099' ]),
-        ('Ciudad Universitaria', 33, [ '03-021' ]),
-        ('Jardines del Pedregal', 34, [ '10-091', '03-088', '03-062' ])
+        ('Doctores', 12, [ '15-045']),
+        ('Argentina', 21, [ '16-027', '16-014' ]),
+        ('Polanco', 22, [ '16-035', '16-032', '16-031', '16-055', '16-054', '16-065', '16-021', '16-059', '16-022', '16-018' ]),
+        ('Bosque de Chapultepec', 23, [ '16-015' ]),
+        ('San Miguel Chapultepec', 24, [ '16-094', '16-095' ]),
+        ('Daniel Garza', 25, [ '16-086', '16-003', '16-025', '16-058' ]),
+        ('Lomas de Chapultepec', 26, [ '16-042' ]),
+        ('Santa Fe', 31, [ '04-025', '04-028' ]),
+        ('Narvarte', 41, [ '14-063' ]),
+        ('Insurgentes Sur/Napoles', 42, [ '14-014', '14-028']),
+        ('Xoco', 43, [ '14-049' ]),
+        ('San Angel', 51, [ '10-193', '10-192', '10-042', '03-019' ]),
+        ('Coyoacan', 52, [ '03-037', '03-065', '03-105', '03-106', '03-114', '03-107', '03-012', '03-099' ]),
+        ('Ciudad Universitaria', 53, [ '03-021' ]),
+        ('Jardines del Pedregal', 54, [ '10-091', '03-088', '03-062' ])
     ]
 
     MIN_LAT = 18.0
@@ -117,12 +120,16 @@ class PlaceSorter:
     </kml>"""
 
 
-    def __init__(self):
+    def __init__(self, ofname):
         self.delegaciones = []
         self.colonias = []
         self.all_places = []
         self.sorting = { }
         self.build_sorting()
+        if ofname is not None:
+            self.of = open(ofname, 'wt', encoding = 'utf-8')
+        else:
+            self.of = sys.stdout
 
 
     def build_sorting(self):
@@ -162,7 +169,7 @@ class PlaceSorter:
                         if geo['type'] == 'Polygon':
                             polygons.append(geo)
                     if len(polygons) == 0:
-                        print('{}, no polygons'.format(name))
+                        print('{}, no polygons'.format(name), file = sys.stderr)
                         sys.exit(1)
                     self.delegaciones.append({
                         'polygons': polygons,
@@ -172,7 +179,7 @@ class PlaceSorter:
                         }
                     })
                 else:
-                    print('{}, geometry type is {}'.format(name, feature['geometry']['type']))
+                    print('{}, geometry type is {}'.format(name, feature['geometry']['type']), file = sys.stderr)
                     sys.exit(1)
 
 
@@ -184,7 +191,6 @@ class PlaceSorter:
                     colonia = feature['properties']['NOMBRE_COLONIA']
                     cve = feature['properties']['CVE_COL']
                     center = centroid(feature['geometry'])
-                    # print('delegacion: {}\ncolonia: {}\ncenter: {}'.format(delegacion, colonia, center))
 
                     self.colonias.append({
                         'geometry': feature['geometry'],
@@ -290,36 +296,61 @@ class PlaceSorter:
                 title = '{} - {}'.format(place['d_name'], title)
             if title and title != colonia:
                 colonia = title
-                print(title)
-                print()
+                print(title, file = self.of)
+                print('', file = self.of)
 
-            print(place['name'])
+            print(place['name'], file = self.of)
             for line in place['address']:
-                print(line)
-            print(place['url'])
-            print()
+                print(line, file = self.of)
+            print(place['url'], file = self.of)
+            print('', file = self.of)
 
 
     def export_to_maps_me(self, set_name):
-        print(self.MAPS_ME_HEADER)
+        print(self.MAPS_ME_HEADER, file = self.of)
         print("""    <name>{}</name>
-    <visibility>1</visibility>""".format(set_name))
+    <visibility>1</visibility>""".format(set_name), file = self.of)
         for place in self.all_places:
-            description = 'Address:\n' + '\n'.join(place['address'])
+            description = '\n'.join(place['address'])
+            description = description.strip()
+            d = ''
+            if description != '':
+                d = '\n      <description>{}</description>'.format(saxutils.escape(description))
             print("""    <Placemark>
-      <name>{}</name>
-      <description>{}</description>
+      <name>{}</name>{}
       <TimeStamp><when>{}</when></TimeStamp>
       <styleUrl>#placemark-blue</styleUrl>
       <Point><coordinates>{},{}</coordinates></Point>
       <ExtendedData xmlns:mwm="http://mapswith.me">
          <mwm:scale>18</mwm:scale>
       </ExtendedData>
-    </Placemark>""".format(saxutils.escape(place['name']), saxutils.escape(description),
-        place['published'], place['lng'], place['lat']))
-        print(self.MAPS_ME_FOOTER)
+    </Placemark>""".format(saxutils.escape(place['name']), d,
+        place['published'], place['lng'], place['lat']), file = self.of)
+        print(self.MAPS_ME_FOOTER, file = self.of)
 
-ps = PlaceSorter()
-ps.filter_places()
-# ps.sort_and_print_places()
-ps.export_to_maps_me('Google CDMX')
+
+def text(ofname):
+    click.echo('Outputting places as text')
+    ps = PlaceSorter(ofname)
+    ps.filter_places()
+    ps.sort_and_print_places()
+
+
+def kml(ofname, set_name):
+    click.echo('Ouputting places as kml')
+    ps = PlaceSorter(ofname)
+    ps.filter_places()
+    ps.export_to_maps_me(set_name)
+
+
+@click.command()
+@click.option('--kml-set-name', '-k', 'set_name', default = '', help = 'kml output: set name')
+@click.option('--output', '-o', 'ofname', default = None, help = 'output file name')
+def places(ofname, set_name):
+    if set_name != '':
+        kml(ofname, set_name)
+    else:
+        text(ofname)
+
+if __name__ == '__main__':
+    places()
